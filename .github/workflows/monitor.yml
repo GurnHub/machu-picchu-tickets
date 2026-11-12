@@ -1,0 +1,34 @@
+name: monitor
+on:
+  schedule:
+    - cron: '7,37 * * * *'
+  workflow_dispatch:
+    inputs:
+      watch_from: { description: 'First date to watch (YYYY-MM-DD)', required: false }
+      watch_to: { description: 'Last date to watch (YYYY-MM-DD)', required: false }
+      alert_label: { description: 'Issue label for the alert (use "test-alert" for a dry run)', required: false }
+  push:
+    paths: ['scripts/monitor.mjs', '.github/workflows/monitor.yml']
+permissions:
+  contents: read
+  issues: write
+  actions: read
+concurrency:
+  group: monitor
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install --no-audit --no-fund --silent
+      - run: node scripts/monitor.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          WATCH_FROM: ${{ inputs.watch_from }}
+          WATCH_TO: ${{ inputs.watch_to }}
+          ALERT_LABEL: ${{ inputs.alert_label }}
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with: { name: failure, path: out/, retention-days: 7, if-no-files-found: ignore }
