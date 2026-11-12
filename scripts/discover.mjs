@@ -1,13 +1,13 @@
 // One-off: record what the public ticket page loads and renders, so the monitor
 // can be written against the real page structure.
-import { chromium } from 'playwright';
+import { chromium } from 'playwright-core';
 import fs from 'node:fs';
 
 const URL = 'https://tuboleto.cultura.pe/llaqta_machupicchu';
 fs.mkdirSync('out', { recursive: true });
 const net = [];
 
-const browser = await chromium.launch();
+const browser = await chromium.launch({ channel: 'chrome' });
 const ctx = await browser.newContext({
   locale: 'es-PE', timezoneId: 'America/Lima', viewport: { width: 1366, height: 900 },
 });
