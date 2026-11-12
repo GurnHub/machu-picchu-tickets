@@ -6,7 +6,7 @@ Watches https://tuboleto.cultura.pe/llaqta_machupicchu and alerts when tickets f
 ## How it works
 
 A GitHub Actions workflow (`.github/workflows/monitor.yml`) runs
-`scripts/monitor.mjs` every 30 minutes. The script opens the public page in
+`scripts/monitor.mjs` every 5 minutes. The script opens the public page in
 headless Chrome, selects each circuit and route, pages the calendar to the watched
 dates and reads which days can be picked. One run takes about 45 seconds.
 
@@ -30,12 +30,11 @@ dates and reads which days can be picked. One run takes about 45 seconds.
 | How often | `cron` in `.github/workflows/monitor.yml` |
 | Test the alert | Actions → monitor → Run workflow, with a date range that is on sale and label `test-alert` |
 
-### Frequency and Actions minutes
+### Frequency
 
-Each run is billed as one minute. On a private repository the free plan includes
-2,000 minutes a month, and every 30 minutes uses about 1,490. If the quota runs out
-the checks stop silently. On a public repository Actions is free, and the cron can
-be tightened to `*/5 * * * *` (GitHub's minimum; scheduled runs can start several
-minutes late).
+The repository is public, so Actions minutes are free. Every 5 minutes is GitHub's
+minimum for scheduled workflows, and runs can start several minutes late. GitHub
+disables scheduled workflows in public repositories after 60 days without
+repository activity; re-enable it under Actions if that happens.
 
 After 7 January 2027 the script exits without checking; disable the workflow then.
