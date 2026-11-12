@@ -69,9 +69,10 @@ async function scrape() {
   };
 
   const openCalendar = async () => {
-    for (let i = 0; i < 5 && !(await calendar.count()); i++) {
-      await page.locator('mat-datepicker-toggle button').click({ timeout: 2500, noWaitAfter: true }).catch(() => {});
-      await calendar.waitFor({ timeout: 2500 }).catch(() => {});
+    const triggers = ['input.mat-datepicker-input', 'mat-datepicker-toggle button'];
+    for (let i = 0; i < 6 && !(await calendar.count()); i++) {
+      await page.locator(triggers[i % 2]).click({ timeout: 1500, noWaitAfter: true }).catch(() => {});
+      await calendar.waitFor({ timeout: 1500 }).catch(() => {});
     }
     if (!(await calendar.count())) throw new Error('calendar did not open');
   };
@@ -115,6 +116,7 @@ async function scrape() {
       let routes = null;
       for (let r = 0; !routes || r < routes.length; r++) {
         queries = [];
+        const started = Date.now();
         const loaded = nextQuery();
         routes = await pick(1, r);
         await loaded;
@@ -131,6 +133,7 @@ async function scrape() {
         }
         await closeCalendar();
         results.push({ circuit: circuits[c], route: routes[r], dates });
+        console.log(`${routes[r].slice(0, 8)} read in ${Date.now() - started} ms`);
       }
     }
   } catch (e) {
@@ -225,6 +228,11 @@ async function clearBroken() {
 }
 
 // ---------- main ----------
+
+if (TO < new Date().toISOString().slice(0, 10)) {
+  console.log(`Watch window ended on ${TO}; nothing to check. Disable this workflow.`);
+  process.exit(0);
+}
 
 try {
   const results = await scrape();
