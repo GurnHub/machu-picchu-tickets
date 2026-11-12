@@ -7,8 +7,6 @@ on:
       watch_from: { description: 'First date to watch (YYYY-MM-DD)', required: false }
       watch_to: { description: 'Last date to watch (YYYY-MM-DD)', required: false }
       alert_label: { description: 'Issue label for the alert (use "test-alert" for a dry run)', required: false }
-  push:
-    paths: ['scripts/monitor.mjs', '.github/workflows/monitor.yml']
 permissions:
   contents: read
   issues: write
