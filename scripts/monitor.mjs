@@ -235,7 +235,11 @@ if (TO < new Date().toISOString().slice(0, 10)) {
 }
 
 try {
-  const results = await scrape();
+  // The page occasionally loads without its route list; one fresh attempt fixes it.
+  const results = await scrape().catch(e => {
+    console.log('First attempt failed, retrying:', e.message);
+    return scrape();
+  });
   const states = results.flatMap(r => Object.values(r.dates));
   const slots = results.flatMap(r =>
     Object.entries(r.dates).filter(([, s]) => s === 'available').map(([d]) => `${d}|${r.route}`));
