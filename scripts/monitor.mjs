@@ -125,7 +125,15 @@ async function scrape() {
 
   const results = [];
   try {
-    await page.goto(SITE, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    const loaded = await page.goto(SITE, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    if (loaded && loaded.status() >= 400) {
+      // The site answers 403 "IP restringida por sospecha de comportamiento
+      // automatizado" when it has restricted the address this runner uses.
+      const said = (await page.locator('body').innerText().catch(() => '')).slice(0, 200);
+      const refused = new Error(`the site refused this runner (HTTP ${loaded.status()}): ${said}`);
+      refused.refused = true;
+      throw refused;
+    }
     await selects.first().waitFor({ timeout: 30000 });
 
     let circuits = null;
@@ -253,7 +261,9 @@ const today = () => new Date().toISOString().slice(0, 10);
 let lastSummary = '';
 async function checkOnce() {
   // The page occasionally loads without its route list; one fresh attempt fixes it.
+  // A refusal from the site is not retried.
   const results = await scrape().catch(e => {
+    if (e.refused) throw e;
     console.log('First attempt failed, retrying:', e.message);
     return scrape();
   });
