@@ -1,22 +1,26 @@
 name: monitor
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    # Each scheduled run checks every 5 minutes for about 3 hours (see LOOP_MINUTES).
+    # This cron only has to start the next run before the current one ends.
+    - cron: '*/15 * * * *'
   workflow_dispatch:
     inputs:
       watch_from: { description: 'First date to watch (YYYY-MM-DD)', required: false }
       watch_to: { description: 'Last date to watch (YYYY-MM-DD)', required: false }
       alert_label: { description: 'Issue label for the alert (use "test-alert" for a dry run)', required: false }
+      loop_minutes: { description: 'Keep checking for this many minutes (0 = check once)', required: false, default: '0' }
 permissions:
   contents: read
   issues: write
-  actions: read
+# One scheduled run at a time; the next one waits and takes over when it ends.
+# Manual runs get their own group so they are not held up behind the loop.
 concurrency:
-  group: monitor
+  group: monitor-${{ github.event_name }}
 jobs:
   check:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 190
     steps:
       - uses: actions/checkout@v4
       - run: npm install --no-audit --no-fund --silent
@@ -27,6 +31,7 @@ jobs:
           WATCH_FROM: ${{ inputs.watch_from }}
           WATCH_TO: ${{ inputs.watch_to }}
           ALERT_LABEL: ${{ inputs.alert_label }}
+          LOOP_MINUTES: ${{ github.event_name == 'schedule' && '170' || inputs.loop_minutes || '0' }}
       - if: failure()
         uses: actions/upload-artifact@v4
         with: { name: failure, path: out/, retention-days: 7, if-no-files-found: ignore }

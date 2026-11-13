@@ -116,7 +116,6 @@ async function scrape() {
       let routes = null;
       for (let r = 0; !routes || r < routes.length; r++) {
         queries = [];
-        const started = Date.now();
         const loaded = nextQuery();
         routes = await pick(1, r);
         await loaded;
@@ -133,7 +132,6 @@ async function scrape() {
         }
         await closeCalendar();
         results.push({ circuit: circuits[c], route: routes[r], dates });
-        console.log(`${routes[r].slice(0, 8)} read in ${Date.now() - started} ms`);
       }
     }
   } catch (e) {
@@ -205,16 +203,13 @@ async function alertAvailable(results, slots) {
   await push('More Machu Picchu dates opened', freshLines);
 }
 
-/** Open a "monitor broken" issue once the check has failed three times in a row. */
+/** Open a "monitor broken" issue, unless one is already open. */
 async function reportBroken(error) {
-  if (!TOKEN || process.env.GITHUB_EVENT_NAME !== 'schedule') return;
-  const runs = await gh('GET', '/actions/workflows/monitor.yml/runs?event=schedule&status=completed&per_page=2');
-  if (runs.workflow_runs.length < 2 || runs.workflow_runs.some(r => r.conclusion !== 'failure')) return;
-  if (await openIssue(BROKEN_LABEL)) return;
+  if (!TOKEN || (await openIssue(BROKEN_LABEL))) return;
   await gh('POST', '/issues', {
     title: 'Ticket monitor is failing',
     labels: [BROKEN_LABEL],
-    body: `@${process.env.GITHUB_REPOSITORY_OWNER} the last three checks failed, so availability is not being watched.\n\n\`\`\`\n${error}\n\`\`\`\n\nRun: ${process.env.GITHUB_SERVER_URL}/${REPO}/actions/runs/${process.env.GITHUB_RUN_ID}`,
+    body: `@${process.env.GITHUB_REPOSITORY_OWNER} the last ${BROKEN_AFTER} checks failed, so availability is not being watched.\n\n\`\`\`\n${error}\n\`\`\`\n\nRun: ${process.env.GITHUB_SERVER_URL}/${REPO}/actions/runs/${process.env.GITHUB_RUN_ID}`,
   });
   await push('Machu Picchu monitor is failing', String(error).slice(0, 300));
 }
@@ -229,12 +224,16 @@ async function clearBroken() {
 
 // ---------- main ----------
 
-if (TO < new Date().toISOString().slice(0, 10)) {
-  console.log(`Watch window ended on ${TO}; nothing to check. Disable this workflow.`);
-  process.exit(0);
-}
+// GitHub starts scheduled workflows far less often than the cron asks for, so a
+// scheduled run keeps checking on its own clock for LOOP_MINUTES and the next
+// run takes over when it ends. LOOP_MINUTES=0 means a single check.
+const LOOP_MS = Number(process.env.LOOP_MINUTES || 0) * 60_000;
+const EVERY_MS = Number(process.env.CHECK_EVERY_SECONDS || 300) * 1000;
+const BROKEN_AFTER = 3;
+const today = () => new Date().toISOString().slice(0, 10);
 
-try {
+let lastSummary = '';
+async function checkOnce() {
   // The page occasionally loads without its route list; one fresh attempt fixes it.
   const results = await scrape().catch(e => {
     console.log('First attempt failed, retrying:', e.message);
@@ -243,19 +242,47 @@ try {
   const states = results.flatMap(r => Object.values(r.dates));
   const slots = results.flatMap(r =>
     Object.entries(r.dates).filter(([, s]) => s === 'available').map(([d]) => `${d}|${r.route}`));
-  const summary = `### ${FROM} to ${TO}: ${slots.length ? `${slots.length} route-days ON SALE` : 'not on sale'}\n\n${table(results)}\n`;
-  console.log(summary);
-  if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
+  const unknown = states.filter(s => s === 'unknown').length;
+  const headline = `${FROM} to ${TO}: ${slots.length ? `${slots.length} route-days ON SALE` : 'not on sale'}`;
+  console.log(`${new Date().toISOString()} ${headline} (${results.length} routes, ${unknown} unreadable)`);
+
+  // Print the full table on the first check and whenever it changes.
+  const summary = `### ${headline}\n\n${table(results)}\n`;
+  if (summary !== lastSummary) {
+    lastSummary = summary;
+    console.log(summary);
+    if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\nAs of ${new Date().toISOString()}\n\n`);
+  }
 
   if (slots.length) await alertAvailable(results, slots);
-  // A run only counts as healthy if at least half of the answers were readable.
-  const unknown = states.filter(s => s === 'unknown').length;
+  // A check only counts as healthy if at least half of the answers were readable.
   if (!results.length || unknown > states.length / 2) {
     throw new Error(`could not read the calendar for ${unknown} of ${states.length} route-days`);
   }
   await clearBroken();
-} catch (e) {
-  console.error('CHECK FAILED:', e);
-  await reportBroken(e.stack || String(e)).catch(x => console.error('could not report failure:', x));
-  process.exit(1);
 }
+
+const deadline = Date.now() + LOOP_MS;
+let failures = 0;
+for (;;) {
+  if (TO < today()) {
+    console.log(`Watch window ended on ${TO}; nothing to check. Disable this workflow.`);
+    break;
+  }
+  const started = Date.now();
+  try {
+    await checkOnce();
+    failures = 0;
+  } catch (e) {
+    failures++;
+    console.error(`CHECK FAILED (${failures} in a row):`, e);
+    if (failures === BROKEN_AFTER) {
+      await reportBroken(e.stack || String(e)).catch(x => console.error('could not report failure:', x));
+    }
+  }
+  const next = started + EVERY_MS;
+  if (next > deadline) break;
+  await new Promise(resolve => setTimeout(resolve, Math.max(0, next - Date.now())));
+}
+// Fail the run if it ended on a failure, so the Actions history shows it.
+process.exit(failures ? 1 : 0);
