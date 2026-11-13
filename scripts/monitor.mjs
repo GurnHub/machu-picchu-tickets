@@ -55,17 +55,35 @@ async function scrape() {
   const options = page.locator('mat-option');
   const calendar = page.locator('mat-calendar');
 
-  /** Open dropdown `sel`, choose option `idx`, return all option labels. */
+  /**
+   * Open dropdown `sel`, choose option `idx`, return all option labels.
+   * The page sometimes re-renders a dropdown just after it opens, which closes
+   * the panel under the click. So open, click and confirm as one step, and
+   * start over with a short timeout whenever any part of it does not hold.
+   */
   const pick = async (sel, idx) => {
-    for (let i = 0; i < 5 && !(await options.count()); i++) {
-      await selects.nth(sel).click({ timeout: 3000 }).catch(() => {});
-      await options.first().waitFor({ timeout: 2000 }).catch(() => {});
+    let labels = [];
+    for (let attempt = 0; attempt < 8; attempt++) {
+      if (!(await options.count())) {
+        await selects.nth(sel).click({ timeout: 3000 }).catch(() => {});
+        await options.first().waitFor({ timeout: 2000 }).catch(() => {});
+      }
+      const seen = (await options.allInnerTexts().catch(() => [])).map(t => t.trim());
+      if (idx >= seen.length) {
+        // Empty or still-loading list: close whatever is open and try again.
+        if (seen.length) labels = seen;
+        await page.keyboard.press('Escape').catch(() => {});
+        await page.waitForTimeout(500);
+        continue;
+      }
+      labels = seen;
+      const clicked = await options.nth(idx).click({ timeout: 3000 }).then(() => true, () => false);
+      await options.first().waitFor({ state: 'detached', timeout: 3000 }).catch(() => {});
+      if (!clicked) continue;
+      const shown = (await selects.nth(sel).innerText().catch(() => '')).trim();
+      if (shown === labels[idx]) return labels;
     }
-    const labels = (await options.allInnerTexts()).map(t => t.trim());
-    if (idx >= labels.length) throw new Error(`dropdown ${sel} has no option ${idx}`);
-    await options.nth(idx).click();
-    await options.first().waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
-    return labels;
+    throw new Error(`could not choose option ${idx} of dropdown ${sel} (saw ${labels.length} options)`);
   };
 
   const openCalendar = async () => {
