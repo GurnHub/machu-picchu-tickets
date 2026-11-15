@@ -6,12 +6,12 @@ Watches https://tuboleto.cultura.pe/llaqta_machupicchu and alerts when tickets f
 ## How it works
 
 A GitHub Actions workflow (`.github/workflows/monitor.yml`) runs
-`scripts/monitor.mjs`, which checks every 5 minutes. Each check opens the public
+`scripts/monitor.mjs`, which checks every 15 minutes. Each check opens the public
 page in headless Chrome, selects each circuit and route, pages the calendar to the
 watched dates and reads which days can be picked. One check takes about 40 seconds.
 
 GitHub starts scheduled workflows much less often than their cron asks for (about
-hourly in practice), so the 5-minute cadence is kept inside the run: a scheduled
+hourly in practice), so the 15-minute cadence is kept inside the run: a scheduled
 run loops for about 3 hours, and the next scheduled run waits in the queue and
 takes over when it ends.
 
@@ -32,14 +32,15 @@ takes over when it ends.
 | What | Where |
 |---|---|
 | Dates watched | `FROM` / `TO` defaults at the top of `scripts/monitor.mjs` |
-| How often | `CHECK_EVERY_SECONDS` (default 300) and `LOOP_MINUTES` in `.github/workflows/monitor.yml` |
+| How often | `CHECK_EVERY_SECONDS` (set to 900) and `LOOP_MINUTES` in `.github/workflows/monitor.yml` |
 | Test the alert | Actions → monitor → Run workflow, with a date range that is on sale and label `test-alert` |
 
 ### Notes
 
 The repository is public, so Actions minutes are free. GitHub disables scheduled
 workflows in public repositories after 60 days without repository activity;
-re-enable it under Actions if that happens. A pushed change takes effect when the
+re-enable it under Actions if that happens. The interval is 15 minutes rather
+than shorter because the site restricts addresses it suspects of automated use. A pushed change takes effect when the
 next scheduled run starts, which can be up to 3 hours later.
 
 After 7 January 2027 the script exits without checking; disable the workflow then.

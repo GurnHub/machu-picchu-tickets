@@ -1,7 +1,8 @@
 name: monitor
 on:
   schedule:
-    # Each scheduled run checks every 5 minutes for about 3 hours (see LOOP_MINUTES).
+    # Each scheduled run checks every 15 minutes for about 3 hours
+    # (see CHECK_EVERY_SECONDS and LOOP_MINUTES).
     # This cron only has to start the next run before the current one ends.
     - cron: '*/15 * * * *'
   workflow_dispatch:
@@ -31,6 +32,7 @@ jobs:
           WATCH_FROM: ${{ inputs.watch_from }}
           WATCH_TO: ${{ inputs.watch_to }}
           ALERT_LABEL: ${{ inputs.alert_label }}
+          CHECK_EVERY_SECONDS: '900'
           LOOP_MINUTES: ${{ github.event_name == 'schedule' && '170' || inputs.loop_minutes || '0' }}
       - if: failure()
         uses: actions/upload-artifact@v4
