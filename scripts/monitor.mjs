@@ -172,14 +172,41 @@ async function scrape() {
 
 // ---------- notifications ----------
 
-async function gh(method, path, body) {
-  const res = await fetch(`https://api.github.com/repos/${REPO}${path}`, {
-    method,
-    headers: { authorization: `Bearer ${TOKEN}`, accept: 'application/vnd.github+json', 'content-type': 'application/json' },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) throw new Error(`GitHub ${method} ${path}: ${res.status} ${(await res.text()).slice(0, 200)}`);
-  return res.status === 204 ? null : res.json();
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Call the GitHub REST API for this repository. Network errors, 5xx answers
+ * and rate limits are retried up to three times (after 2, 5 and 15 seconds).
+ * A POST that creates something may have succeeded even though its answer was
+ * lost, so `alreadyDone` is asked before each retry and its result, if any, is
+ * returned instead of sending the request again.
+ */
+async function gh(method, path, body, { alreadyDone } = {}) {
+  const delays = [2000, 5000, 15000];
+  for (let attempt = 0; ; attempt++) {
+    let res, problem;
+    try {
+      res = await fetch(`https://api.github.com/repos/${REPO}${path}`, {
+        method,
+        headers: { authorization: `Bearer ${TOKEN}`, accept: 'application/vnd.github+json', 'content-type': 'application/json' },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(20000),
+      });
+      if (res.ok) return res.status === 204 ? null : res.json();
+      problem = `${res.status} ${(await res.text().catch(() => '')).slice(0, 200)}`;
+    } catch (e) {
+      problem = String(e);
+    }
+    const retryable = !res || res.status >= 500 || res.status === 429 ||
+      (res.status === 403 && res.headers.get('x-ratelimit-remaining') === '0');
+    if (!retryable || attempt >= delays.length) throw new Error(`GitHub ${method} ${path}: ${problem}`);
+    console.log(`GitHub ${method} ${path} failed (${problem.slice(0, 80)}); retrying in ${delays[attempt] / 1000}s`);
+    await sleep(delays[attempt]);
+    if (alreadyDone) {
+      const done = await alreadyDone().catch(() => null);
+      if (done) return done;
+    }
+  }
 }
 
 const openIssue = async label =>
@@ -215,7 +242,7 @@ async function alertAvailable(results, slots) {
 
   const existing = await openIssue(LABEL);
   if (!existing) {
-    const made = await gh('POST', '/issues', { title, body: body(slots), labels: [LABEL] });
+    const made = await gh('POST', '/issues', { title, body: body(slots), labels: [LABEL] }, { alreadyDone: () => openIssue(LABEL) });
     console.log('Alert issue opened:', made.html_url);
     await push(title, lines);
     return;
@@ -236,7 +263,7 @@ async function reportBroken(error) {
     title: 'Ticket monitor is failing',
     labels: [BROKEN_LABEL],
     body: `@${process.env.GITHUB_REPOSITORY_OWNER} the last ${BROKEN_AFTER} checks failed, so availability is not being watched.\n\n\`\`\`\n${error}\n\`\`\`\n\nRun: ${process.env.GITHUB_SERVER_URL}/${REPO}/actions/runs/${process.env.GITHUB_RUN_ID}`,
-  });
+  }, { alreadyDone: () => openIssue(BROKEN_LABEL) });
   await push('Machu Picchu monitor is failing', String(error).slice(0, 300));
 }
 
@@ -310,7 +337,7 @@ for (;;) {
   }
   const next = started + EVERY_MS;
   if (next > deadline) break;
-  await new Promise(resolve => setTimeout(resolve, Math.max(0, next - Date.now())));
+  await sleep(Math.max(0, next - Date.now()));
 }
 // Fail the run if it ended on a failure, so the Actions history shows it.
 process.exit(failures ? 1 : 0);
