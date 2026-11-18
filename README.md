@@ -1,7 +1,7 @@
 # Machu Picchu ticket monitor
 
 Watches https://tuboleto.cultura.pe/llaqta_machupicchu and alerts when tickets for
-**20 December 2026 to 15 January 2027** go on sale, on any of the 10 routes.
+**1–7 January 2027** go on sale, on any of the 10 routes.
 
 ## How it works
 
@@ -45,4 +45,4 @@ re-enable it under Actions if that happens. The interval is 15 minutes rather
 than shorter because the site restricts addresses it suspects of automated use. A pushed change takes effect when the
 next scheduled run starts, which can be up to 3 hours later.
 
-After 15 January 2027 the script exits without checking; disable the workflow then.
+After 7 January 2027 the script exits without checking; disable the workflow then.
