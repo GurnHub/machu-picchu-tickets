@@ -212,11 +212,23 @@ async function gh(method, path, body, { alreadyDone } = {}) {
 const openIssue = async label =>
   (await gh('GET', `/issues?state=open&labels=${encodeURIComponent(label)}&per_page=1`))[0] || null;
 
+/** Send a phone notification through ntfy.sh, if a topic is configured. */
 async function push(title, text) {
-  if (!process.env.NTFY_TOPIC) return;
-  await fetch(`https://ntfy.sh/${process.env.NTFY_TOPIC}`, {
-    method: 'POST', body: text, headers: { Title: title, Priority: 'urgent', Tags: 'tickets', Click: SITE },
-  }).catch(e => console.log('ntfy push failed:', String(e)));
+  if (!process.env.NTFY_TOPIC) return false;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch(`https://ntfy.sh/${process.env.NTFY_TOPIC}`, {
+        method: 'POST', body: text, signal: AbortSignal.timeout(15000),
+        headers: { Title: title, Priority: 'urgent', Tags: 'tickets', Click: SITE },
+      });
+      if (res.ok) { console.log('ntfy push sent'); return true; }
+      console.log(`ntfy push failed: HTTP ${res.status} ${(await res.text().catch(() => '')).slice(0, 120)}`);
+    } catch (e) {
+      console.log('ntfy push failed:', String(e));
+    }
+    if (attempt < 3) await sleep(attempt * 3000);
+  }
+  return false;
 }
 
 function table(results) {
@@ -276,6 +288,16 @@ async function clearBroken() {
 }
 
 // ---------- main ----------
+
+// Manual "test_push" run: send one notification and stop, without reading the site.
+if (process.env.TEST_PUSH === 'true') {
+  if (!process.env.NTFY_TOPIC) {
+    console.error('NTFY_TOPIC is not set. Add it under Settings > Secrets and variables > Actions.');
+    process.exit(1);
+  }
+  const sent = await push('Machu Picchu monitor: test', 'Push notifications are working. Tap to open the ticket site.');
+  process.exit(sent ? 0 : 1);
+}
 
 // GitHub starts scheduled workflows far less often than the cron asks for, so a
 // scheduled run keeps checking on its own clock for LOOP_MINUTES and the next

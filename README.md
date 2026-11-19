@@ -25,9 +25,13 @@ takes over when it ends.
   and later reappears is not alerted again while the issue stays open.
 - **Monitor broken:** after three failed checks in a row, an issue labelled
   `monitor-broken` is opened. It closes itself when checks pass again.
-- **Phone push (optional):** install the [ntfy](https://ntfy.sh) app, subscribe to
-  a hard-to-guess topic name, and add that name as the repository secret
-  `NTFY_TOPIC`. Alerts are then also pushed at urgent priority.
+- **Phone push:** install the ntfy app ([Android](https://play.google.com/store/apps/details?id=io.heckel.ntfy),
+  [iOS](https://apps.apple.com/app/ntfy/id1625396347)), subscribe to a hard-to-guess
+  topic name, and store that name as the repository secret `NTFY_TOPIC`. Alerts
+  are then also pushed at urgent priority, and tapping one opens the ticket site.
+  To test it: Actions → monitor → Run workflow, tick "Only send a test phone
+  notification". Anyone who knows the topic name can read and send to it, so keep
+  it out of the repository.
 
 ## Changing things
 

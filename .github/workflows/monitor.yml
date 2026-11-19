@@ -10,6 +10,7 @@ on:
       watch_from: { description: 'First date to watch (YYYY-MM-DD)', required: false }
       watch_to: { description: 'Last date to watch (YYYY-MM-DD)', required: false }
       alert_label: { description: 'Issue label for the alert (use "test-alert" for a dry run)', required: false }
+      test_push: { description: 'Only send a test phone notification', type: boolean, required: false, default: false }
       loop_minutes: { description: 'Keep checking for this many minutes (0 = check once)', required: false, default: '0' }
 permissions:
   contents: read
@@ -32,6 +33,7 @@ jobs:
           WATCH_FROM: ${{ inputs.watch_from }}
           WATCH_TO: ${{ inputs.watch_to }}
           ALERT_LABEL: ${{ inputs.alert_label }}
+          TEST_PUSH: ${{ inputs.test_push }}
           CHECK_EVERY_SECONDS: '900'
           LOOP_MINUTES: ${{ github.event_name == 'schedule' && '170' || inputs.loop_minutes || '0' }}
       - if: failure()
